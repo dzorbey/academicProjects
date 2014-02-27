@@ -1,0 +1,6 @@
+This is a project to visualize forest fires on mobile devices.
+Please keep in mind that in order to run the project, you need to have a PDA which has
+a FRANSON GPS GATE program and Mysaifu JVM installed into.
+GPS GATE software will have an output TCP/IP port named 20175 which must be open 
+and running in order portconnect class to connect to listen the GPS data. otherwise you
+might get an error. Project is under development.

@@ -1,0 +1,301 @@
+#include <pthread.h>
+#include <stdio.h>
+#include <semaphore.h>
+#include <stdlib.h>
+#include <errno.h>
+#include <unistd.h>
+#define BUFFER 2048
+
+sem_t printer_semaphore;
+sem_t ready_semaphore;
+sem_t mytmp;
+
+void print(int data);
+
+pthread_mutex_t mymutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t semaphore_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t job_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+struct Node {
+
+    int data;
+    struct Node *next;
+};
+typedef struct Node queueNode;
+
+struct queue {
+
+    int size;
+    queueNode *front;
+    queueNode *back;
+};
+typedef struct queue printerQueue;
+
+void queueInit(printerQueue *myqueue);
+void queuePush(printerQueue *myqueue,int element);
+int queuePop(printerQueue *myqueue);
+int isEmpty(printerQueue *myqueue);
+void queuePrint(printerQueue *myqueue);
+
+
+
+void queueInit(printerQueue *myqueue)
+{
+    myqueue->size = 0;
+    myqueue->front = myqueue->back = NULL;
+}
+
+
+void queuePush(printerQueue *myqueue,int element)
+{
+
+    if (myqueue->front==NULL)
+    {
+        myqueue->front = (queueNode*)malloc(sizeof(queueNode));
+        myqueue->front->data = element;
+        myqueue->back = myqueue->front;
+    }
+    else
+    {
+        myqueue->back->next = (queueNode*)malloc(sizeof(queueNode));
+        myqueue->back = myqueue->back->next;
+        myqueue->back->data = element;
+
+    }
+   myqueue->back->next = NULL;
+   myqueue->size++;    
+}
+
+
+
+int queuePop(printerQueue *myqueue)
+{
+    queueNode *hold;
+    hold=myqueue->front;
+   
+    if(myqueue->size!=0)
+    {
+        myqueue->front=myqueue->front->next;
+        myqueue->size--;
+    }
+    else
+    {
+        myqueue->front=NULL;
+        myqueue->back=NULL;
+    }
+    return hold->data;
+}
+
+
+void queuePrint(printerQueue *myqueue)
+{
+
+    queueNode *tmp;
+   
+    tmp=myqueue->front;
+   
+    while(tmp)
+    {
+        printf("%d ",tmp->data);
+        tmp=tmp->next;
+    }
+}
+
+
+
+int isEmpty(printerQueue *myqueue)
+{
+    if(myqueue->front==NULL     &&  myqueue->back==NULL)
+    {
+         return 1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+printerQueue Myqueue;
+printerQueue tmp;
+
+
+void *printer(void  *ptr);
+void *printerJobs(void *ptr);
+
+
+
+
+void print(int data)
+{
+     printf("starts printing with %dKb\n", data);
+     
+  //sleep(5);
+  printf("finished printing %dKb\n", data);
+}
+
+
+
+
+
+
+void *printer(void *ptr)
+{
+   
+    while(1) {
+       
+         int data;
+     int value;
+
+          sem_wait(&ready_semaphore);
+       
+         
+           if(!isEmpty(&Myqueue))
+       {
+
+
+                 pthread_mutex_lock (&semaphore_mutex);
+
+           data=queuePop(&Myqueue);
+           printf("%d is Dequed\n", data);
+           
+           value=data;
+
+           while(0<=value-1)
+       {
+          sem_post(&printer_semaphore);
+          value--;
+       }
+
+
+//             pthread_mutex_unlock (&semaphore_mutex);
+
+
+
+       // print(data);
+         
+
+       printf("starts printing with %dKb\n", data);
+       sleep(data*0.01);
+       printf("finished printing %dKb\n", data);
+
+
+              //   sem_post(&mytmp);
+             // sem_getvalue(&printer_semaphore, &value);
+            //printf("%d** ", value );
+
+
+pthread_mutex_unlock (&semaphore_mutex);
+
+
+       }
+}
+}
+
+
+void *printerJobs(void *ptr)
+{
+
+     //sem_post(&ready_semaphore);
+
+
+     int data;
+     int *message;
+     int value;
+     message = (void *) ptr;
+     
+       queuePush(&tmp,message);
+       data=queuePop(&tmp);
+
+
+           pthread_mutex_lock (&job_mutex);
+
+       while(0<=data-1)
+       {
+             sem_wait(&printer_semaphore);
+             sem_getvalue(&printer_semaphore, &value);
+
+          if(value<0)
+          {
+          sem_post(&printer_semaphore);
+          }
+          data--;
+       }
+
+           pthread_mutex_unlock (&job_mutex);
+     
+     
+
+     pthread_mutex_lock (&mymutex);
+     
+     queuePush(&Myqueue,message);
+         //queuePrint(&Myqueue);
+         printf("%d is pushed\n", message);
+     pthread_mutex_unlock (&mymutex);
+
+
+          sem_post(&ready_semaphore);
+       
+
+     //pthread_mutex_unlock (&job_mutex);
+
+
+
+
+
+}
+
+
+
+main(int argc,char *argv[])
+{
+    sem_init(&printer_semaphore,0,BUFFER);
+    sem_init(&ready_semaphore,0,0);
+    sem_init(&mytmp,0,0);
+
+    queueInit(&Myqueue);
+        queueInit(&tmp);
+
+    int MAXTHREADS=atoi(argv[2]);
+
+    pthread_t printerthread;
+    pthread_t jobs[MAXTHREADS];
+    srand((unsigned)time(NULL));
+
+    int i,k;
+
+   
+        printf("Simulation started.. Free buffer is 2048Kb. Runtime is %d seconds. .\n ", atoi(argv[1])*60);
+
+
+       pthread_create( &printerthread, NULL, printer, NULL);
+   
+       
+   
+   
+   
+    for(i=0; i<MAXTHREADS; i++)
+    {
+        k=rand()%1024;
+        while( k < 50)
+        {
+            k= rand()%1024;
+        }
+       pthread_create( &jobs[i], NULL, printerJobs, (void *) k );
+    }
+
+
+
+
+    pthread_join(printerthread,NULL);
+
+    for(i=0; i<MAXTHREADS; i++)
+    {
+        pthread_join(jobs[i],NULL);
+    }
+   
+
+    exit(0);
+}
